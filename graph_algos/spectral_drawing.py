@@ -1,6 +1,10 @@
+from turtle import width
+from matplotlib.colors import ListedColormap
+from PIL import Image, ImageDraw
 import numpy as np
 import scipy as sp
 import scipy.io as sio 
+import matplotlib.pyplot as plt
 
 
 def bfs(G: np.ndarray, s: int) -> np.ndarray: 
@@ -37,6 +41,14 @@ def bfs(G: np.ndarray, s: int) -> np.ndarray:
     return dist
 
 
+def koren(G: np.ndarray, dim: int, v1: np.ndarray, eps: float) -> np.ndarray: 
+    pass
+
+
+def weighted_centroid_smoothing(D: np.ndarray, A: np.ndarray, n_smooth: int, coords: np.ndarray) -> np.ndarray:  
+    pass
+
+
 def hde(G: np.ndarray, s: int = 10) -> np.ndarray: 
     """Implements high-dimensional embedding (HDE) as described in 
     Kirmani, Madduri (2018) and originally in Harel and Koren (2002). 
@@ -68,7 +80,9 @@ def hde(G: np.ndarray, s: int = 10) -> np.ndarray:
         Subspace[:,i] = B[:,i]
 
         # normalize column of S
-        Subspace[:,i] = Subspace[:,i] / np.sum(Subspace[:,i])
+        sum = np.sum(Subspace[:,i])
+        if sum != 0: 
+            Subspace[:,i] = Subspace[:,i] / sum
 
         for k in range(i): 
             # orthogonalize
@@ -82,12 +96,23 @@ def hde(G: np.ndarray, s: int = 10) -> np.ndarray:
     # drop col 0 of S (degenerate)
     Subspace = Subspace[:,1:]
 
-    w, v = np.linalg.eig(Subspace.T @ L @ Subspace)
+    try: 
+        w, v = np.linalg.eig(Subspace.T @ L @ Subspace)
+    except Exception as e: 
+        print("Something went wrong!") 
+        print(e)
+        return
+
+
     # np.linalg.eig return v in weird shape, use transpose
     Y = v[0:2].T
     assert Y.shape == (s, 2)
 
     return B @ Y
+
+
+def spectral(G: np.ndarray) -> np.ndarray: 
+    pass
 
 
 def draw_graph_with_coords(G: np.ndarray, coords: np.ndarray, fname: str = None) -> None: 
@@ -99,18 +124,79 @@ def draw_graph_with_coords(G: np.ndarray, coords: np.ndarray, fname: str = None)
     fname -- name of file to save image to if not None (default: None)
     """
 
-    # TODO:
-    pass
+    scale_factor = 10
+    x_bounds = [int(np.min(coords[:,0])), int(np.max(coords[:,0]))]
+    y_bounds = [int(np.min(coords[:,1])), int(np.max(coords[:,1]))]
+    
+    offset = max(np.max(np.abs(x_bounds)), np.max(np.abs(y_bounds)))
+
+    # max_abs_coord = int(np.max(coords)+1)
+    size = scale_factor * 2 * offset 
+    im = Image.new(mode="RGB", size=(size, size))
+    draw = ImageDraw.Draw(im)
+
+    def transform_coord(c): 
+        # return scale_factor*(np.multiply(c, [1, -1]) + [max_abs_coord, max_abs_coord])
+        return scale_factor*np.add(c, [offset, offset])
+
+    # for all (u,v) in G draw segment from coords[u] to coords[v] 
+    for u, v, val in zip(G.row, G.col, G.data):
+        line = [tuple(transform_coord(coords[u])), tuple(transform_coord(coords[v]))]
+        draw.line(line, width=0)
+    
+    # origin dot
+    origin = transform_coord([0,0])
+    draw.ellipse((origin[0], origin[1], origin[0]+scale_factor, origin[1]+scale_factor), fill=(0,255,0))
+    
+    if fname is not None: 
+        im.save(fname)
+
+
+def bitmap(G: np.ndarray, n_colors: int = 10, fname: str = None) -> None: 
+    """Produces a bitmap/heatmap of the adjacency matrix of graph G. 
+
+    Keyword args: 
+    G -- the graph in dense array format
+    n_colors -- number of colors to use in the map (default: 10)
+    fname -- name of file to save image to if not None (default: None)
+    """
+
+    figsize = np.array(G.shape)//100 + np.ones(2) 
+    plt.figure(figsize=figsize)
+
+    # colormap
+    viridis_arr = plt.get_cmap('viridis')(np.linspace(0, 1, 256))
+    colors = viridis_arr[0::len(viridis_arr)//(n_colors-1)]
+    # add white as first color
+    colors = np.vstack( ([1, 1, 1, 1], colors) )
+    cmap = ListedColormap(colors)
+
+    # process graph
+    G[G != 0] = 1
+
+    plt.imshow(G, vmin=0, vmax=np.max(G), cmap=cmap)
+    plt.axis('off')
+
+    if fname is not None: 
+        plt.savefig(fname)
 
 
 def main(): 
-    G = sio.mmread("crack/crack.mtx")
-    # G = sio.mmread("494_bus/494_bus.mtx")
+    # graph_names = ["crack", "small", "494_bus"]
+    # graph_name = "fe_4elt2"
+    graph_name = "crack"
 
-    G.todense()
+    # for graph_name in graph_names: 
+    print(f"\n{graph_name}")
+    G = sio.mmread(f"graphs/{graph_name}/{graph_name}.mtx")
 
     coords = hde(G)
     print(coords)
+
+    draw_graph_with_coords(G, coords, fname=f"out/{graph_name}.png")
+
+    # G = np.array(G.todense())
+    # bitmap(G, n_colors=10, fname=f"out/{graph_name}_bit.png", )
 
 if __name__ == '__main__': 
     main()
