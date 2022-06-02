@@ -1,3 +1,5 @@
+import argparse
+
 from matplotlib.colors import ListedColormap
 from PIL import Image, ImageDraw
 import numpy as np
@@ -81,6 +83,8 @@ def hde(G: np.ndarray, s: int = 10) -> np.ndarray:
         # normalize column of S
         sum = np.sum(Subspace[:,i])
         if sum != 0: 
+            # fix problems with NaN and inf
+            Subspace = np.nan_to_num(Subspace)
             Subspace[:,i] = Subspace[:,i] / sum
 
         for k in range(i): 
@@ -114,7 +118,7 @@ def spectral(G: np.ndarray) -> np.ndarray:
     pass
 
 
-def draw_graph_with_coords(G: np.ndarray, coords: np.ndarray, fname: str = None) -> None: 
+def draw_graph_with_coords(G: np.ndarray, coords: np.ndarray, imsize: int = 720, fname: str = None) -> None: 
     """Draws graph G with given coordinates.  
 
     Keywords args: 
@@ -123,15 +127,18 @@ def draw_graph_with_coords(G: np.ndarray, coords: np.ndarray, fname: str = None)
     fname -- name of file to save image to if not None (default: None)
     """
 
-    scale_factor = 10
+    # fix problems with NaN and inf
+    coords = np.nan_to_num(coords)
     x_bounds = [int(np.min(coords[:,0])), int(np.max(coords[:,0]))]
     y_bounds = [int(np.min(coords[:,1])), int(np.max(coords[:,1]))]
     
     offset = max(np.max(np.abs(x_bounds)), np.max(np.abs(y_bounds)))
 
     # max_abs_coord = int(np.max(coords)+1)
-    size = scale_factor * 2 * offset 
-    im = Image.new(mode="RGB", size=(size, size))
+    scale_factor = imsize / (2 * offset)
+    # scale_factor = 10
+    # imsize = scale_factor * 2 * offset 
+    im = Image.new(mode="RGB", size=(imsize, imsize))
     draw = ImageDraw.Draw(im)
 
     def transform_coord(c): 
@@ -181,21 +188,38 @@ def bitmap(G: np.ndarray, n_colors: int = 10, fname: str = None) -> None:
 
 
 def main(): 
-    # graph_names = ["crack", "small", "494_bus"]
-    # graph_name = "fe_4elt2"
-    graph_name = "crack"
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('name', metavar="Graph name", type=str, 
+                        help='Name of graph')
+    parser.add_argument('-bit', action='store_true',
+                        help='Create a bitmap image')
+    parser.add_argument('-hde', action='store_true', 
+                        help='Create an HDE embedding image')
 
-    # for graph_name in graph_names: 
-    print(f"\n{graph_name}")
+    args = parser.parse_args()
+
+    # graph_name = "fe_4elt2"
+    # graph_name = "crack"
+    # graph_name = "abb313"
+    # graph_name = "barth5"
+    graph_name = args.name
+
+    print(f"Reading graph {graph_name}")
     G = sio.mmread(f"graphs/{graph_name}/{graph_name}.mtx")
 
-    coords = hde(G)
-    print(coords)
+    # bitmap
+    if args.bit: 
+        print(f"Creating bitmap of {graph_name}")
+        G_dense = np.array(G.todense())
+        bitmap(G_dense, n_colors=10, fname=f"out/{graph_name}_bit.png", )
 
-    draw_graph_with_coords(G, coords, fname=f"out/{graph_name}.png")
+    # hde projection
+    if args.hde: 
+        print(f"Creating HDE graph of {graph_name}")
+        coords = hde(G, s=50)
+        # print(coords)
+        draw_graph_with_coords(G, coords, fname=f"out/{graph_name}.png")
 
-    # G = np.array(G.todense())
-    # bitmap(G, n_colors=10, fname=f"out/{graph_name}_bit.png", )
 
 if __name__ == '__main__': 
     main()
