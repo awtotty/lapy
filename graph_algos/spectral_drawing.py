@@ -1,4 +1,3 @@
-from turtle import width
 from matplotlib.colors import ListedColormap
 from PIL import Image, ImageDraw
 import numpy as np
